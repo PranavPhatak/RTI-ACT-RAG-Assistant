@@ -5,3 +5,5 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_community.vectorstores import FAISS
 
 llm = ChatOllama(model='llama3:latest')
+
+loader = PyPDFLoader('')
