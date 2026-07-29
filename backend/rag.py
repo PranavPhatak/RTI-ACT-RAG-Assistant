@@ -31,3 +31,18 @@ prompt = ChatPromptTemplate([
     ("user", "Question: {question}")
 ])
 
+
+def rag_chain(question):
+    docs = retriever.invoke(question)
+
+    context = "\n".join(doc.page_content for doc in docs)
+
+    chain = prompt | llm
+
+    response = chain.invoke({
+        'context':context,
+        'question':question
+    })
+
+    return response.content
+
