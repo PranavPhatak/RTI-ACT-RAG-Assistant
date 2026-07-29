@@ -6,4 +6,28 @@ from langchain_community.vectorstores import FAISS
 
 llm = ChatOllama(model='llama3:latest')
 
-loader = PyPDFLoader('')
+loader = PyPDFLoader('data/RTI-ACT-English.pdf')
+law_docs = loader.load()
+
+text_splitter = RecursiveCharacterTextSplitter()
+chunks = text_splitter.split_documents(law_docs)
+
+embedding = OllamaEmbeddings(model="qwen3-embedding:0.6b")
+vector_store = FAISS.from_documents(documents=chunks, embedding=embedding)
+retriever = vector_store.as_retriever(search_kwargs={'k':5})
+
+prompt = ChatPromptTemplate([
+    ("system", 
+        """You are a helpful research paper assistant.
+
+        Answer the user's question using ONLY the provided context.
+
+        If the answer is not present in the context, say that you could not find the answer in the research paper.
+
+        Context:
+        {context}
+        """
+    ),
+    ("user", "Question: {question}")
+])
+
