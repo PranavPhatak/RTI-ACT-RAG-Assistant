@@ -6,7 +6,7 @@ from langchain_community.vectorstores import FAISS
 
 llm = ChatOllama(model='llama3:latest')
 
-loader = PyPDFLoader('RTI-Act_English.pdf')
+loader = PyPDFLoader('../data/RTI-Act_English.pdf')
 law_docs = loader.load()
 
 text_splitter = RecursiveCharacterTextSplitter()
@@ -18,11 +18,17 @@ retriever = vector_store.as_retriever(search_kwargs={'k':5})
 
 prompt = ChatPromptTemplate([
     ("system", 
-        """You are a helpful research paper assistant.
+        """You are a Legal RTI Assistant specializing in the Right to Information Act, 2005.
 
-        Answer the user's question using ONLY the provided context.
+        Answer the user's question using ONLY the provided legal context.
 
-        If the answer is not present in the context, say that you could not find the answer in the research paper.
+        Do not invent or assume legal provisions.
+
+        If the answer cannot be found in the provided context, clearly state that the information could not be found in the available documents.
+
+        Provide the relevant section or provision whenever possible.
+
+        This system provides legal information for research purposes and does not replace professional legal advice.
 
         Context:
         {context}
