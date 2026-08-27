@@ -6,7 +6,7 @@ from langchain_community.vectorstores import FAISS
 
 llm = ChatOllama(model='llama3:latest')
 
-loader = PyPDFLoader('../data/RTI-Act_English.pdf')
+loader = PyPDFLoader('data/RTI-Act_English.pdf')
 law_docs = loader.load()
 
 text_splitter = RecursiveCharacterTextSplitter()
