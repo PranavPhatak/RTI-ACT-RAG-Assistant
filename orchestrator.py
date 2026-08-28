@@ -1,5 +1,7 @@
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
+from dotenv import load_dotenv
 
 from agents.query_understanding_agent import QueryUnderstandingAgent
 from agents.eligibility_agent import EligibilitySectionAgent
@@ -10,6 +12,27 @@ from agents.response_summarization_agent import ResponseSummarizationAgent
 from agents.user_friendly_response_agent import UserFriendlyResponseAgent
 from agents.verification_agent import VerificationAgent
 
+import os
+
+
+# ============================================================
+# LOAD ENVIRONMENT VARIABLES
+# ============================================================
+
+load_dotenv()
+
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+
+if not GOOGLE_API_KEY:
+    raise ValueError(
+        "GOOGLE_API_KEY is not configured. "
+        "Please add it to your .env file."
+    )
+
+
+# ============================================================
+# ORCHESTRATOR
+# ============================================================
 
 class Orchestrator:
 
@@ -35,16 +58,14 @@ class Orchestrator:
 
         self.verification_agent = VerificationAgent()
 
-
         # ====================================================
         # ROUTER LLM
         # ====================================================
 
         self.router_llm = ChatOllama(
-            model="qwen3:8b",
-            temperature=0
+            model="llama3:latest",
+            temperature=0,
         )
-
 
         # ====================================================
         # ROUTER PROMPT
@@ -57,16 +78,16 @@ class Orchestrator:
                     """
 You are the Intelligent Router of a Legal RTI Assistant.
 
-Your job is ONLY to decide which specialist agents
+Your job is ONLY to determine which specialist agents
 are required for the user's request.
 
 You MUST NOT answer the user's question.
 
-The Query Understanding Agent is ALWAYS executed
-before this router.
+The Query Understanding Agent has already analyzed
+the user's request.
 
-After understanding the user's request, activate ONLY
-the specialist agents that are actually required.
+Activate ONLY the specialist agents that are actually
+required.
 
 Multiple agents can be selected.
 
@@ -83,6 +104,9 @@ Use when the user asks to:
 - provide a short summary
 - explain the contents of a document
 
+Do NOT activate this agent unless summarization
+or document explanation is requested.
+
 ----------------------------------------------------
 
 CASE_SEARCH
@@ -93,10 +117,10 @@ Use ONLY when the user asks to:
 - find previous cases
 - search land-dispute cases
 - compare the current case with previous cases
-- find judgments/orders/cases similar to the uploaded case
+- find judgments/orders/cases similar to the case
 
-DO NOT activate CASE_SEARCH merely because
-the uploaded document is about a land dispute.
+Do NOT activate this agent merely because the
+document is about a land dispute.
 
 ----------------------------------------------------
 
@@ -107,9 +131,10 @@ Use when the user asks to:
 - identify RTI sections
 - explain an RTI section
 - determine which RTI section applies
-- identify sections mentioned in an uploaded RTI
-- explain why a section applies
-- determine RTI eligibility/procedure
+- identify sections mentioned in an RTI
+- explain why an RTI section applies
+- determine RTI eligibility
+- explain RTI procedure
 
 ----------------------------------------------------
 
@@ -120,15 +145,15 @@ Use when the user asks to:
 - analyze a legal situation
 - determine legal implications
 - analyze rejection of an RTI
-- evaluate the legal position
-- interpret the facts and applicable law
+- evaluate a legal position
+- interpret facts and applicable law
 - determine possible legal action
 
 ----------------------------------------------------
 
 APPEAL_DRAFTING
 
-Use when the user explicitly asks to:
+Use ONLY when the user asks to:
 
 - draft an RTI appeal
 - draft a first appeal
@@ -141,8 +166,8 @@ Use when the user explicitly asks to:
 GENERAL_QUESTION
 
 Use for normal RTI questions that do not require
-document summarization, case search, legal analysis,
-or appeal drafting.
+specialized document processing, case search,
+legal analysis, or appeal drafting.
 
 ====================================================
 ROUTING EXAMPLES
@@ -153,7 +178,6 @@ Example 1:
 "Summarize my uploaded RTI."
 
 Output:
-
 SUMMARIZATION
 
 ----------------------------------------------------
@@ -164,7 +188,6 @@ Example 2:
 which sections apply."
 
 Output:
-
 SUMMARIZATION, RTI_SECTION
 
 ----------------------------------------------------
@@ -174,7 +197,6 @@ Example 3:
 "Find similar land dispute cases."
 
 Output:
-
 CASE_SEARCH
 
 ----------------------------------------------------
@@ -185,7 +207,6 @@ Example 4:
 RTI sections apply."
 
 Output:
-
 CASE_SEARCH, RTI_SECTION
 
 ----------------------------------------------------
@@ -195,7 +216,6 @@ Example 5:
 "Analyze my rejected RTI."
 
 Output:
-
 LEGAL_ANALYSIS
 
 ----------------------------------------------------
@@ -205,7 +225,6 @@ Example 6:
 "My RTI was rejected. Can I appeal?"
 
 Output:
-
 LEGAL_ANALYSIS, RTI_SECTION
 
 ----------------------------------------------------
@@ -215,7 +234,6 @@ Example 7:
 "Draft a first appeal for me."
 
 Output:
-
 APPEAL_DRAFTING
 
 ----------------------------------------------------
@@ -225,7 +243,6 @@ Example 8:
 "Analyze my rejection and draft an appeal."
 
 Output:
-
 LEGAL_ANALYSIS, RTI_SECTION, APPEAL_DRAFTING
 
 ----------------------------------------------------
@@ -235,7 +252,6 @@ Example 9:
 "What is Section 6 of the RTI Act?"
 
 Output:
-
 GENERAL_QUESTION
 
 ----------------------------------------------------
@@ -245,53 +261,50 @@ Example 10:
 "What section applies to my RTI?"
 
 Output:
-
 RTI_SECTION
 
 ====================================================
 IMPORTANT ROUTING RULES
 ====================================================
 
-1. Query Understanding is ALWAYS executed.
+1. Query Understanding is ALWAYS executed before routing.
 
-2. Do NOT activate SUMMARIZATION unless
-   the user asks for a summary or explanation
-   of a document.
+2. Do NOT activate SUMMARIZATION unless the user asks
+   for summarization or explanation.
 
-3. Do NOT activate CASE_SEARCH unless the user
-   asks for similar/previous cases.
+3. Do NOT activate CASE_SEARCH unless the user asks
+   for similar/previous cases.
 
-4. Do NOT activate RTI_SECTION unless the user
-   asks about RTI sections, applicability,
-   eligibility, or procedure.
+4. Do NOT activate RTI_SECTION unless the user asks
+   about RTI sections, applicability, eligibility,
+   or procedure.
 
-5. Do NOT activate LEGAL_ANALYSIS unless the
-   user asks for legal analysis or interpretation.
+5. Do NOT activate LEGAL_ANALYSIS unless the user asks
+   for legal analysis or interpretation.
 
-6. Do NOT activate APPEAL_DRAFTING unless the
-   user asks for an appeal or draft.
+6. Do NOT activate APPEAL_DRAFTING unless the user
+   asks for an appeal or appeal draft.
 
-7. Multiple agents can be activated when the
-   user asks for multiple things.
+7. Multiple agents may be activated when necessary.
 
-8. The presence of an uploaded document alone
-   must NOT determine which agent is activated.
+8. The presence of an uploaded document alone must NOT
+   determine which agent is activated.
 
-9. Conversation memory can be used to understand
-   references such as:
-
+9. Conversation memory may be used to understand:
    "this case", "it", "that RTI", "the above",
-   or "my previous request".
+   "my previous request", etc.
 
-10. If the user asks only for a summary,
-    activate only SUMMARIZATION.
+10. If the user asks only for a summary:
+    SUMMARIZATION
 
-11. If the user asks only for similar cases,
-    activate only CASE_SEARCH.
+11. If the user asks only for similar cases:
+    CASE_SEARCH
 
-12. If the user asks for both similar cases
-    and RTI sections, activate CASE_SEARCH
-    and RTI_SECTION.
+12. If the user asks for similar cases and RTI sections:
+    CASE_SEARCH, RTI_SECTION
+
+13. If the request is only a normal RTI question:
+    GENERAL_QUESTION
 
 ====================================================
 OUTPUT FORMAT
@@ -302,48 +315,65 @@ Return ONLY the agent names separated by commas.
 Do not explain your decision.
 
 ====================================================
-USER QUESTION:
+USER QUESTION
+====================================================
+
 {question}
 
 ====================================================
-CONVERSATION MEMORY:
+QUERY UNDERSTANDING
+====================================================
+
+{query_analysis}
+
+====================================================
+CONVERSATION MEMORY
+====================================================
+
 {memory}
 
 ====================================================
-UPLOADED DOCUMENT AVAILABLE:
+UPLOADED DOCUMENT AVAILABLE
+====================================================
+
 {document_available}
+
 """
                 )
             ]
         )
 
-
     # ========================================================
-    # ROUTING FUNCTION
+    # ROUTE USER REQUEST
     # ========================================================
 
     def route(
         self,
         question,
+        query_analysis="",
         memory="",
         document_available=False
     ):
 
-        chain = (
-            self.router_prompt
-            | self.router_llm
-        )
+        chain = self.router_prompt | self.router_llm
 
         response = chain.invoke(
             {
                 "question": question,
+                "query_analysis": query_analysis,
                 "memory": memory,
                 "document_available": str(document_available)
             }
         )
 
-        raw = response.content.strip().upper()
+        raw = response.content
 
+        if isinstance(raw, list):
+            raw = " ".join(
+                str(item) for item in raw
+            )
+
+        raw = str(raw).strip().upper()
 
         # ====================================================
         # ALLOWED ROUTES
@@ -358,9 +388,8 @@ UPLOADED DOCUMENT AVAILABLE:
             "GENERAL_QUESTION"
         ]
 
-
         # ====================================================
-        # ORDER OF EXECUTION
+        # EXECUTION ORDER
         # ====================================================
 
         route_order = [
@@ -382,7 +411,6 @@ UPLOADED DOCUMENT AVAILABLE:
 
                     routes.append(route_name)
 
-
         # ====================================================
         # SAFETY FALLBACK
         # ====================================================
@@ -394,7 +422,6 @@ UPLOADED DOCUMENT AVAILABLE:
             ]
 
         return routes
-
 
     # ========================================================
     # MAIN WORKFLOW
@@ -408,19 +435,20 @@ UPLOADED DOCUMENT AVAILABLE:
         uploaded_documents=None
     ):
 
+        # ====================================================
+        # INITIALIZE DOCUMENT LIST
+        # ====================================================
+
         if uploaded_documents is None:
             uploaded_documents = []
 
-
         # ====================================================
-        # DOCUMENT CHECK
+        # CHECK DOCUMENT
         # ====================================================
 
         document_available = bool(
-            uploaded_text
-            and uploaded_text.strip()
+            uploaded_text and uploaded_text.strip()
         )
-
 
         # ====================================================
         # STEP 1
@@ -432,9 +460,13 @@ CURRENT USER QUESTION:
 
 {question}
 
+==================================================
+
 CONVERSATION MEMORY:
 
 {memory}
+
+==================================================
 
 UPLOADED DOCUMENT:
 
@@ -445,12 +477,9 @@ UPLOADED DOCUMENT:
 }
 """
 
-        query_analysis = (
-            self.query_agent.run(
-                understanding_input
-            )
+        query_analysis = self.query_agent.run(
+            understanding_input
         )
-
 
         # ====================================================
         # STEP 2
@@ -459,10 +488,10 @@ UPLOADED DOCUMENT:
 
         routes = self.route(
             question=question,
+            query_analysis=query_analysis,
             memory=memory,
             document_available=document_available
         )
-
 
         # ====================================================
         # RESULT CONTAINERS
@@ -484,7 +513,6 @@ UPLOADED DOCUMENT:
 
         appeal = ""
 
-
         # ====================================================
         # STEP 3
         # SUMMARIZATION
@@ -492,14 +520,11 @@ UPLOADED DOCUMENT:
 
         if "SUMMARIZATION" in routes:
 
-            summary = (
-                self.response_agent.summarize_document(
-                    question=question,
-                    document_text=uploaded_text,
-                    query_analysis=query_analysis
-                )
+            summary = self.response_agent.summarize_document(
+                question=question,
+                document_text=uploaded_text,
+                query_analysis=query_analysis
             )
-
 
         # ====================================================
         # STEP 4
@@ -508,14 +533,11 @@ UPLOADED DOCUMENT:
 
         if "RTI_SECTION" in routes:
 
-            eligibility = (
-                self.eligibility_agent.run(
-                    question=question,
-                    document_text=uploaded_text,
-                    memory=memory
-                )
+            eligibility = self.eligibility_agent.run(
+                question=question,
+                document_text=uploaded_text,
+                memory=memory
             )
-
 
         # ====================================================
         # STEP 5
@@ -524,37 +546,25 @@ UPLOADED DOCUMENT:
 
         if "CASE_SEARCH" in routes:
 
-            cases = (
-                self.case_agent.run(
-                    question,
-                    memory=memory
-                )
+            cases = self.case_agent.run(
+                question,
+                memory=memory
             )
-
 
         # ====================================================
         # STEP 6
-        # LEGAL REASONING
+        # LEGAL ANALYSIS
         # ====================================================
 
         if "LEGAL_ANALYSIS" in routes:
 
-            reasoning = (
-                self.reasoning_agent.run(
-                    question=question,
-
-                    rti_analysis=
-                        eligibility["analysis"],
-
-                    case_analysis=
-                        cases["analysis"],
-
-                    memory=memory,
-
-                    document_text=uploaded_text
-                )
+            reasoning = self.reasoning_agent.run(
+                question=question,
+                rti_analysis=eligibility["analysis"],
+                case_analysis=cases["analysis"],
+                memory=memory,
+                document_text=uploaded_text
             )
-
 
         # ====================================================
         # STEP 7
@@ -563,35 +573,23 @@ UPLOADED DOCUMENT:
 
         if "APPEAL_DRAFTING" in routes:
 
-            # Appeal drafting requires legal reasoning.
+            # Appeal drafting needs legal reasoning.
 
             if not reasoning:
 
-                reasoning = (
-                    self.reasoning_agent.run(
-                        question=question,
-
-                        rti_analysis=
-                            eligibility["analysis"],
-
-                        case_analysis=
-                            cases["analysis"],
-
-                        memory=memory,
-
-                        document_text=uploaded_text
-                    )
-                )
-
-
-            appeal = (
-                self.appeal_agent.run(
+                reasoning = self.reasoning_agent.run(
                     question=question,
-                    reasoning=reasoning,
+                    rti_analysis=eligibility["analysis"],
+                    case_analysis=cases["analysis"],
+                    memory=memory,
                     document_text=uploaded_text
                 )
-            )
 
+            appeal = self.appeal_agent.run(
+                question=question,
+                reasoning=reasoning,
+                document_text=uploaded_text
+            )
 
         # ====================================================
         # STEP 8
@@ -614,11 +612,9 @@ UPLOADED DOCUMENT:
             )
         )
 
-
         sources = []
 
         seen_sources = set()
-
 
         for doc in source_documents:
 
@@ -628,7 +624,6 @@ UPLOADED DOCUMENT:
                 {}
             )
 
-
             filename = metadata.get(
                 "source_file",
                 metadata.get(
@@ -637,24 +632,22 @@ UPLOADED DOCUMENT:
                 )
             )
 
+            if "page_number" in metadata:
 
-            # LangChain PDF pages are normally
-            # zero-based.
+                page = metadata["page_number"]
 
-            page = metadata.get(
-                "page_number",
-                metadata.get(
-                    "page",
-                    0
-                ) + 1
-            )
+            elif "page" in metadata:
 
+                page = metadata["page"] + 1
+
+            else:
+
+                page = 1
 
             key = (
                 filename,
                 page
             )
-
 
             if key not in seen_sources:
 
@@ -667,79 +660,109 @@ UPLOADED DOCUMENT:
 
                 seen_sources.add(key)
 
-
         # ====================================================
         # STEP 9
-        # INITIAL RESPONSE GENERATION
+        # GENERATE INITIAL RESPONSE
         # ====================================================
 
         generated_answer = (
             self.response_agent.generate_final_response(
                 question=question,
-
-                query_analysis=
-                    query_analysis,
-
-                summary=
-                    summary,
-
-                eligibility=
-                    eligibility["analysis"],
-
-                case_analysis=
-                    cases["analysis"],
-
-                reasoning=
-                    reasoning,
-
-                appeal=
-                    appeal,
-
-                memory=
-                    memory,
-
-                uploaded_document_available=
-                    document_available
+                query_analysis=query_analysis,
+                summary=summary,
+                eligibility=eligibility["analysis"],
+                case_analysis=cases["analysis"],
+                reasoning=reasoning,
+                appeal=appeal,
+                memory=memory,
+                uploaded_document_available=document_available
             )
         )
 
-
         # ====================================================
         # STEP 10
-        # VERIFICATION
+        # BUILD VERIFICATION CONTEXT
+        # ====================================================
+
+        verification_context = f"""
+
+UPLOADED DOCUMENT:
+
+{
+    uploaded_text
+    if document_available
+    else "NO UPLOADED DOCUMENT"
+}
+
+==================================================
+
+SUMMARIZATION OUTPUT:
+
+{summary}
+
+==================================================
+
+RTI SECTION ANALYSIS:
+
+{eligibility["analysis"]}
+
+==================================================
+
+CASE RETRIEVAL OUTPUT:
+
+{cases["analysis"]}
+
+==================================================
+
+LEGAL REASONING OUTPUT:
+
+{reasoning}
+
+==================================================
+
+APPEAL DRAFT:
+
+{appeal}
+
+==================================================
+
+CONVERSATION MEMORY:
+
+{memory}
+
+"""
+
+        # ====================================================
+        # STEP 11
+        # VERIFY INITIAL RESPONSE
         # ====================================================
 
         verification_result = (
             self.verification_agent.run(
                 question=question,
                 answer=generated_answer,
-                context=uploaded_text,
+                context=verification_context,
                 query_analysis=query_analysis
             )
         )
 
-
         # ====================================================
-        # STEP 11
-        # REGENERATION IF INCORRECT
+        # STEP 12
+        # VERIFICATION / REGENERATION
         # ====================================================
 
         max_attempts = 2
 
-        attempt = 0
+        attempt = 1
 
         verified = False
 
         verification_feedback = ""
 
-
-        while attempt < max_attempts:
-
-            attempt += 1
-
+        while True:
 
             # ------------------------------------------------
-            # Read verification result
+            # READ VERIFICATION RESULT
             # ------------------------------------------------
 
             if isinstance(
@@ -747,12 +770,14 @@ UPLOADED DOCUMENT:
                 dict
             ):
 
-                verified = verification_result.get(
-                    "verified",
-                    False
+                verified = bool(
+                    verification_result.get(
+                        "verified",
+                        False
+                    )
                 )
 
-                verification_feedback = (
+                verification_feedback = str(
                     verification_result.get(
                         "feedback",
                         ""
@@ -777,94 +802,96 @@ UPLOADED DOCUMENT:
                     verification_result
                 )
 
-
             # ------------------------------------------------
-            # If correct, stop regeneration
+            # IF VERIFIED
             # ------------------------------------------------
 
             if verified:
 
                 break
 
+            # ------------------------------------------------
+            # MAXIMUM ATTEMPTS REACHED
+            # ------------------------------------------------
+
+            if attempt >= max_attempts:
+
+                break
 
             # ------------------------------------------------
-            # If incorrect, regenerate
+            # REGENERATE RESPONSE
             # ------------------------------------------------
 
-            regeneration_question = f"""
-Original User Request:
+            regeneration_instruction = f"""
 
-{question}
-
-The previous generated answer was:
+The previous answer generated for the user was:
 
 {generated_answer}
 
-A verification agent reviewed the answer and
-found the following problem:
+The Verification Agent found the following problem:
 
 {verification_feedback}
 
-Please regenerate the answer.
+Regenerate the answer.
 
 IMPORTANT:
 
-- Correct the identified problem.
-- Use ONLY the available legal/document context.
-- Do not invent facts.
-- Do not invent RTI sections.
-- Do not invent case details.
-- Keep the answer directly related to the user's request.
-- If information is unavailable, clearly say so.
+1. Correct the identified problem.
+
+2. Use only information supported by the
+   available context.
+
+3. Do not invent facts.
+
+4. Do not invent RTI sections.
+
+5. Do not invent case details.
+
+6. Do not make unsupported legal claims.
+
+7. Answer exactly what the user requested.
+
+8. If the information is unavailable,
+   clearly say that it is unavailable.
+
+9. Keep the answer simple and understandable.
+
 """
 
             generated_answer = (
                 self.response_agent.generate_final_response(
-                    question=regeneration_question,
-
-                    query_analysis=
-                        query_analysis,
-
-                    summary=
-                        summary,
-
-                    eligibility=
-                        eligibility["analysis"],
-
-                    case_analysis=
-                        cases["analysis"],
-
-                    reasoning=
-                        reasoning,
-
-                    appeal=
-                        appeal,
-
-                    memory=
-                        memory,
-
-                    uploaded_document_available=
-                        document_available
+                    question=(
+                        f"{question}\n\n"
+                        f"{regeneration_instruction}"
+                    ),
+                    query_analysis=query_analysis,
+                    summary=summary,
+                    eligibility=eligibility["analysis"],
+                    case_analysis=cases["analysis"],
+                    reasoning=reasoning,
+                    appeal=appeal,
+                    memory=memory,
+                    uploaded_document_available=document_available
                 )
             )
 
-
             # ------------------------------------------------
-            # Verify regenerated answer
+            # VERIFY REGENERATED RESPONSE
             # ------------------------------------------------
 
             verification_result = (
                 self.verification_agent.run(
                     question=question,
                     answer=generated_answer,
-                    context=uploaded_text,
+                    context=verification_context,
                     query_analysis=query_analysis
                 )
             )
 
+            attempt += 1
 
         # ====================================================
-        # STEP 12
+        # STEP 13
         # USER-FRIENDLY RESPONSE
         # ====================================================
 
@@ -874,87 +901,69 @@ IMPORTANT:
             )
         )
 
-
         # ====================================================
-        # STEP 13
+        # STEP 14
         # RETURN RESULTS
         # ====================================================
 
         return {
 
             # ------------------------------------------------
-            # Routing
+            # ROUTING
             # ------------------------------------------------
 
-            "routes":
-                routes,
+            "routes": routes,
 
-            "route":
-                ", ".join(routes),
-
+            "route": ", ".join(routes),
 
             # ------------------------------------------------
-            # Query understanding
+            # QUERY UNDERSTANDING
             # ------------------------------------------------
 
-            "query_analysis":
-                query_analysis,
-
+            "query_analysis": query_analysis,
 
             # ------------------------------------------------
-            # Specialist outputs
+            # SPECIALIST OUTPUTS
             # ------------------------------------------------
 
-            "summary":
-                summary,
+            "summary": summary,
 
-            "eligibility":
-                eligibility["analysis"],
+            "eligibility": eligibility["analysis"],
 
-            "case_analysis":
-                cases["analysis"],
+            "case_analysis": cases["analysis"],
 
-            "reasoning":
-                reasoning,
+            "reasoning": reasoning,
 
-            "appeal_draft":
-                appeal,
-
+            "appeal_draft": appeal,
 
             # ------------------------------------------------
-            # Generated answer
+            # GENERATED ANSWER
             # ------------------------------------------------
 
-            "generated_answer":
-                generated_answer,
-
+            "generated_answer": generated_answer,
 
             # ------------------------------------------------
-            # Verification
+            # VERIFICATION
             # ------------------------------------------------
 
-            "verification":
-                verification_result,
+            "verification": verification_result,
 
-            "verified":
-                verified,
+            "verified": verified,
 
-            "verification_attempts":
-                attempt,
+            "verification_attempts": attempt,
 
-
-            # ------------------------------------------------
-            # Final answer
-            # ------------------------------------------------
-
-            "answer":
-                final_answer,
-
+            "verification_feedback":
+                verification_feedback,
 
             # ------------------------------------------------
-            # Sources
+            # FINAL USER-FRIENDLY ANSWER
             # ------------------------------------------------
 
-            "sources":
-                sources
+            "answer": final_answer,
+
+            # ------------------------------------------------
+            # SOURCES
+            # ------------------------------------------------
+
+            "sources": sources
         }
