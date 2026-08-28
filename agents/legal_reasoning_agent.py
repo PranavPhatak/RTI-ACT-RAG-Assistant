@@ -11,76 +11,96 @@ class LegalReasoningAgent:
             temperature=0
         )
 
+
         self.prompt = ChatPromptTemplate.from_messages(
             [
                 (
                     "system",
                     """
-You are the Legal Reasoning Agent
-for a Legal RTI Assistant.
+You are the Legal Reasoning Agent.
 
-Analyze the user's situation using
-ONLY the information supplied by:
+Analyze the user's RTI/land-dispute situation.
 
-1. RTI Act analysis
-2. Previous land-dispute RTI cases
-3. User's original request
+Use:
 
-Your analysis should explain:
+- RTI section analysis
+- Similar case analysis
+- Uploaded document
+- Conversation context
 
-- Relevant RTI provisions
-- Relevant previous cases
-- Similarities between the user's situation
-  and previous cases
-- Differences
-- Whether the previous cases provide useful
-  guidance
-- Possible reason for rejection, if supported
-  by the context
-- Whether an appeal may be relevant
+Do not invent facts.
 
-IMPORTANT:
+Clearly distinguish:
 
-Do not invent legal provisions.
+FACTS
+LEGAL PROVISIONS
+ANALYSIS
+CONCLUSION
 
-Do not claim that a previous case automatically
-applies to the user's situation.
+This is legal information for research
+and should not be presented as professional
+legal advice.
 
-Do not guarantee success.
+Question:
 
-If evidence is insufficient, explicitly say so.
+{question}
 
-RTI ACT ANALYSIS:
+RTI analysis:
 
 {rti_analysis}
 
-PREVIOUS CASE ANALYSIS:
+Similar cases:
 
 {case_analysis}
 
-USER REQUEST:
+Uploaded document:
 
-{question}
+{document}
+
+Conversation memory:
+
+{memory}
 """
                 )
             ]
         )
 
+
     def run(
         self,
         question,
-        rti_analysis,
-        case_analysis
+        rti_analysis="",
+        case_analysis="",
+        memory="",
+        document_text=""
     ):
 
-        chain = self.prompt | self.llm
+        chain = (
+            self.prompt
+            | self.llm
+        )
+
 
         response = chain.invoke(
             {
-                "question": question,
-                "rti_analysis": rti_analysis,
-                "case_analysis": case_analysis
+                "question":
+                    question,
+
+                "rti_analysis":
+                    rti_analysis,
+
+                "case_analysis":
+                    case_analysis,
+
+                "document":
+                    document_text
+                    if document_text
+                    else "No uploaded document.",
+
+                "memory":
+                    memory
             }
         )
+
 
         return response.content

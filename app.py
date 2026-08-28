@@ -1,4 +1,9 @@
+import os
+import tempfile
+
 import streamlit as st
+
+from langchain_community.document_loaders import PyPDFLoader
 
 from orchestrator import Orchestrator
 
@@ -16,7 +21,7 @@ st.set_page_config(
 
 
 # ============================================================
-# CUSTOM CSS
+# CSS
 # ============================================================
 
 st.markdown(
@@ -37,12 +42,11 @@ st.markdown(
         margin-bottom: 1.5rem;
     }
 
-    .answer-box {
-        background-color: #f4f8fb;
-        border-left: 5px solid #1f6feb;
-        padding: 1rem 1.25rem;
+    .upload-box {
+        padding: 1rem;
         border-radius: 8px;
-        margin-top: 0.5rem;
+        border: 1px solid #d0d7de;
+        margin-bottom: 1rem;
     }
 
     </style>
@@ -52,26 +56,31 @@ st.markdown(
 
 
 # ============================================================
-# INITIALIZE SESSION MEMORY
+# SESSION STATE
 # ============================================================
 
 if "messages" not in st.session_state:
-
     st.session_state.messages = []
 
 
-if "case_memory" not in st.session_state:
+if "uploaded_documents" not in st.session_state:
+    st.session_state.uploaded_documents = []
 
-    st.session_state.case_memory = ""
+
+if "uploaded_text" not in st.session_state:
+    st.session_state.uploaded_text = ""
+
+
+if "selected_query" not in st.session_state:
+    st.session_state.selected_query = ""
 
 
 # ============================================================
-# INITIALIZE ORCHESTRATOR
+# ORCHESTRATOR
 # ============================================================
 
 @st.cache_resource
 def get_orchestrator():
-
     return Orchestrator()
 
 
@@ -88,56 +97,214 @@ with st.sidebar:
 
     st.write(
         """
-        This system uses a multi-agent RAG
-        architecture for RTI and land-dispute
-        related queries.
+        AI-assisted legal research for
+        RTI and land-dispute cases.
         """
     )
 
-    st.markdown("---")
-
-    st.subheader("🤖 Agents")
-
-    st.write(
-        "🔎 Query Understanding"
-    )
-
-    st.write(
-        "📜 Eligibility & Section Analysis"
-    )
-
-    st.write(
-        "📚 Case Retrieval"
-    )
-
-    st.write(
-        "⚖️ Legal Reasoning"
-    )
-
-    st.write(
-        "📝 Appeal Drafting"
-    )
-
-    st.write(
-        "💬 Response Summarization"
-    )
+    # ========================================================
+    # FILE UPLOAD SECTION
+    # ========================================================
 
     st.markdown("---")
 
-    st.subheader("💡 Example Questions")
+    st.subheader("📄 Upload RTI Document")
+
+    st.caption(
+        "Optional: Upload an RTI, rejection letter, "
+        "appeal, or other case document."
+    )
+
+    uploaded_file = st.file_uploader(
+        "Choose a PDF",
+        type=["pdf"],
+        key="rti_uploader"
+    )
+
+    if uploaded_file is not None:
+
+        existing_files = {
+            item["name"]
+            for item in st.session_state.uploaded_documents
+        }
+
+        if uploaded_file.name not in existing_files:
+
+            with st.spinner(
+                "Reading uploaded document..."
+            ):
+
+                temp_path = None
+
+                try:
+
+                    with tempfile.NamedTemporaryFile(
+                        delete=False,
+                        suffix=".pdf"
+                    ) as temp_file:
+
+                        temp_file.write(
+                            uploaded_file.getbuffer()
+                        )
+
+                        temp_path = temp_file.name
+
+
+                    loader = PyPDFLoader(
+                        temp_path
+                    )
+
+                    documents = loader.load()
+
+
+                    # ----------------------------------------
+                    # Preserve page information
+                    # ----------------------------------------
+
+                    document_text_parts = []
+
+                    for doc in documents:
+
+                        page_number = (
+                            doc.metadata.get(
+                                "page",
+                                0
+                            ) + 1
+                        )
+
+                        document_text_parts.append(
+                            f"""
+[FILE: {uploaded_file.name}
+[PAGE: {page_number}]
+
+{doc.page_content}
+"""
+                        )
+
+
+                    document_text = "\n".join(
+                        document_text_parts
+                    )
+
+
+                    # ----------------------------------------
+                    # Store document
+                    # ----------------------------------------
+
+                    st.session_state.uploaded_documents.append(
+                        {
+                            "name": uploaded_file.name,
+                            "pages": len(documents)
+                        }
+                    )
+
+
+                    st.session_state.uploaded_text += (
+                        "\n\n"
+                        + document_text
+                    )
+
+
+                    # ----------------------------------------
+                    # Display upload message
+                    # ----------------------------------------
+
+                    st.session_state.messages.append(
+                        {
+                            "role": "system",
+                            "content":
+                                f"📄 Uploaded: "
+                                f"**{uploaded_file.name}** "
+                                f"({len(documents)} pages)"
+                        }
+                    )
+
+
+                    st.success(
+                        "Document uploaded successfully."
+                    )
+
+                except Exception as e:
+
+                    st.error(
+                        f"Could not read PDF: {e}"
+                    )
+
+                finally:
+
+                    if (
+                        temp_path
+                        and os.path.exists(temp_path)
+                    ):
+
+                        os.remove(temp_path)
+
+
+    # ========================================================
+    # UPLOADED DOCUMENTS
+    # ========================================================
+
+    if st.session_state.uploaded_documents:
+
+        st.markdown("---")
+
+        st.subheader("📚 Current Documents")
+
+        for document in (
+            st.session_state.uploaded_documents
+        ):
+
+            st.write(
+                f"📄 {document['name']}"
+            )
+
+            st.caption(
+                f"{document['pages']} pages"
+            )
+
+
+    # ========================================================
+    # AGENTS
+    # ========================================================
+
+    st.markdown("---")
+
+    st.subheader("🤖 Multi-Agent System")
+
+    st.write("🔎 Query Understanding")
+    st.write("📄 Document Summarization")
+    st.write("📚 Case Retrieval")
+    st.write("📜 RTI Section Analysis")
+    st.write("⚖️ Legal Reasoning")
+    st.write("📝 Appeal Drafting")
+    st.write("💬 Response Generation")
+
+
+    # ========================================================
+    # EXAMPLE QUESTIONS
+    # ========================================================
+
+    st.markdown("---")
+
+    st.subheader("💡 Examples")
 
     examples = [
 
-        "What RTI section allows me to request land records?",
+        "What is Section 6 of the RTI Act?",
 
-        "Are there previous RTI cases involving land disputes?",
+        "Summarize the uploaded RTI in simple words.",
 
-        "My RTI application was rejected. What can I do?",
+        "Find similar land-dispute cases.",
 
-        "Draft a first appeal for my rejected RTI request."
+        "Which RTI sections apply to this request?",
+
+        "Find similar cases and tell me which RTI sections apply.",
+
+        "My RTI was rejected. Can I file an appeal?",
+
+        "Draft a first appeal for my rejected RTI."
 
     ]
-
 
     for example in examples:
 
@@ -146,13 +313,14 @@ with st.sidebar:
             use_container_width=True
         ):
 
-            st.session_state["selected_query"] = (
-                example
-            )
+            st.session_state.selected_query = example
 
+
+    # ========================================================
+    # CLEAR
+    # ========================================================
 
     st.markdown("---")
-
 
     if st.button(
         "🗑️ Clear Conversation",
@@ -161,13 +329,17 @@ with st.sidebar:
 
         st.session_state.messages = []
 
-        st.session_state.case_memory = ""
+        st.session_state.uploaded_documents = []
+
+        st.session_state.uploaded_text = ""
+
+        st.session_state.selected_query = ""
 
         st.rerun()
 
 
 # ============================================================
-# HEADER
+# MAIN HEADER
 # ============================================================
 
 st.markdown(
@@ -179,48 +351,58 @@ st.markdown(
 
 st.markdown(
     '<p class="subtitle">'
-    'AI-assisted RTI research for land-dispute cases'
+    'AI-assisted RTI and land-dispute legal research'
     '</p>',
     unsafe_allow_html=True
 )
 
 
 # ============================================================
-# DISPLAY PREVIOUS CONVERSATION
+# SHOW CONVERSATION
 # ============================================================
 
 for message in st.session_state.messages:
 
-    with st.chat_message(
-        message["role"]
-    ):
+    role = message["role"]
 
-        st.markdown(
+    if role == "system":
+
+        st.info(
             message["content"]
         )
 
+    else:
+
+        with st.chat_message(role):
+
+            st.markdown(
+                message["content"]
+            )
+
 
 # ============================================================
-# USER INPUT
+# CHAT INPUT
 # ============================================================
-
-selected_query = st.session_state.get(
-    "selected_query",
-    ""
-)
-
 
 question = st.chat_input(
-    "Ask your RTI / land-dispute question..."
+    "Ask your RTI or land-dispute question..."
 )
 
 
-# Use sidebar question if selected
-if selected_query and not question:
+# ============================================================
+# SIDEBAR EXAMPLE QUESTION
+# ============================================================
 
-    question = selected_query
+if (
+    st.session_state.selected_query
+    and not question
+):
 
-    st.session_state["selected_query"] = ""
+    question = (
+        st.session_state.selected_query
+    )
+
+    st.session_state.selected_query = ""
 
 
 # ============================================================
@@ -229,9 +411,9 @@ if selected_query and not question:
 
 if question:
 
-    # --------------------------------------------------------
-    # Store user message
-    # --------------------------------------------------------
+    # ========================================================
+    # STORE USER MESSAGE
+    # ========================================================
 
     st.session_state.messages.append(
         {
@@ -246,33 +428,32 @@ if question:
         st.markdown(question)
 
 
-    # --------------------------------------------------------
-    # Build conversation memory
-    # --------------------------------------------------------
+    # ========================================================
+    # BUILD CONVERSATION MEMORY
+    # ========================================================
 
-    recent_messages = (
-        st.session_state.messages[-10:]
+    conversation_messages = (
+        st.session_state.messages[-12:]
     )
 
 
-    memory_text = "\n".join(
+    conversation_memory = "\n".join(
 
-        [
-            f"{m['role']}: {m['content']}"
-            for m in recent_messages
-        ]
+        f"{message['role'].upper()}: "
+        f"{message['content']}"
 
+        for message in conversation_messages
     )
 
 
-    # --------------------------------------------------------
-    # Run Multi-Agent System
-    # --------------------------------------------------------
+    # ========================================================
+    # RUN ORCHESTRATOR
+    # ========================================================
 
     with st.chat_message("assistant"):
 
         with st.spinner(
-            "Analyzing your request..."
+            "Understanding your request..."
         ):
 
             try:
@@ -281,8 +462,15 @@ if question:
 
                     question=question,
 
-                    memory=memory_text
+                    memory=conversation_memory,
 
+                    uploaded_text=(
+                        st.session_state.uploaded_text
+                    ),
+
+                    uploaded_documents=(
+                        st.session_state.uploaded_documents
+                    )
                 )
 
 
@@ -291,56 +479,57 @@ if question:
 
             except Exception as e:
 
+                result = None
+
                 answer = (
-                    "⚠️ An error occurred:\n\n"
+                    "⚠️ Something went wrong.\n\n"
                     f"{str(e)}"
                 )
 
-                result = None
 
-
-        # ----------------------------------------------------
-        # Display Answer
-        # ----------------------------------------------------
+        # ====================================================
+        # DISPLAY ANSWER
+        # ====================================================
 
         st.markdown(answer)
 
 
-        # ----------------------------------------------------
-        # Display Sources
-        # ----------------------------------------------------
+        # ====================================================
+        # SOURCES
+        # ====================================================
 
-        if result and result.get("sources"):
+        if (
+            result
+            and result.get("sources")
+        ):
 
             st.markdown(
                 "### 📚 Sources"
             )
 
-
-            displayed = set()
-
+            seen = set()
 
             for source in result["sources"]:
 
                 key = (
-                    source["file"],
-                    source["page"]
+                    source.get("file"),
+                    source.get("page")
+                )
+
+                if key in seen:
+                    continue
+
+                seen.add(key)
+
+                st.write(
+                    f"• **{source.get('file')}** "
+                    f"— Page {source.get('page')}"
                 )
 
 
-                if key not in displayed:
-
-                    st.write(
-                        f"• **{source['file']}** "
-                        f"— Page {source['page']}"
-                    )
-
-                    displayed.add(key)
-
-
-        # ----------------------------------------------------
-        # Display workflow
-        # ----------------------------------------------------
+        # ====================================================
+        # WORKFLOW DISPLAY
+        # ====================================================
 
         if result:
 
@@ -349,31 +538,26 @@ if question:
             ):
 
                 st.write(
-                    "Selected workflow:"
+                    "Activated agents:"
                 )
 
-                st.code(
-                    result["route"]
-                )
+                for route in result.get(
+                    "routes",
+                    []
+                ):
 
-                st.write(
-                    "Query Understanding:"
-                )
-
-                st.write(
-                    result["query_analysis"]
-                )
+                    st.write(
+                        f"✅ {route}"
+                    )
 
 
-    # --------------------------------------------------------
-    # Store assistant response in memory
-    # --------------------------------------------------------
+    # ========================================================
+    # STORE ASSISTANT RESPONSE
+    # ========================================================
 
     st.session_state.messages.append(
-
         {
             "role": "assistant",
             "content": answer
         }
-
     )

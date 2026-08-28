@@ -1,7 +1,10 @@
 from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
 
-from rag_retriever import retrieve_rti_act, format_documents
+from rag_retriever import (
+    retrieve_rti_act,
+    format_documents
+)
 
 
 class EligibilitySectionAgent:
@@ -13,64 +16,104 @@ class EligibilitySectionAgent:
             temperature=0
         )
 
+
         self.prompt = ChatPromptTemplate.from_messages(
             [
                 (
                     "system",
                     """
-You are the Eligibility and Section Analysis Agent.
+You are the RTI Section Analysis Agent.
 
-Your task is to analyze the user's RTI-related
-question using ONLY the provided RTI Act context.
+Analyze the user's RTI question/document.
 
-Determine:
+You have two sources:
 
-1. Whether the request appears relevant
-   to the RTI Act.
+1. Uploaded document
+2. RTI Act knowledge retrieved from FAISS
 
-2. Which RTI Act section(s) are relevant.
+IMPORTANT:
 
-3. Whether the cited section actually supports
-   the conclusion.
+Clearly distinguish:
 
-4. Explain the relevant provision.
+A. Sections explicitly mentioned
+   in the uploaded document.
 
-5. If the provided context does not contain
-   enough information, clearly say so.
+B. Potentially relevant RTI Act sections.
 
-Never invent a section number.
+Never claim that a section was used in
+the uploaded document unless the document
+actually mentions it.
 
-Context:
+If no section is explicitly mentioned,
+say so.
 
-{context}
+Explain why a potentially relevant
+section may apply.
 
-User request:
+Use only the provided context.
+
+USER QUESTION:
 
 {question}
+
+UPLOADED DOCUMENT:
+
+{document}
+
+RTI ACT CONTEXT:
+
+{rti_context}
 """
                 )
             ]
         )
 
-    def run(self, question):
+
+    def run(
+        self,
+        question,
+        document_text="",
+        memory=""
+    ):
 
         docs = retrieve_rti_act(
             question,
             k=5
         )
 
-        context = format_documents(docs)
 
-        chain = self.prompt | self.llm
+        rti_context = format_documents(
+            docs
+        )
+
+
+        document = (
+            document_text
+            if document_text.strip()
+            else "No uploaded document."
+        )
+
+
+        chain = (
+            self.prompt
+            | self.llm
+        )
+
 
         response = chain.invoke(
             {
-                "context": context,
-                "question": question
+                "question": question,
+                "document": document,
+                "rti_context": rti_context
             }
         )
 
+
         return {
-            "analysis": response.content,
-            "documents": docs
+
+            "analysis":
+                response.content,
+
+            "documents":
+                docs
         }

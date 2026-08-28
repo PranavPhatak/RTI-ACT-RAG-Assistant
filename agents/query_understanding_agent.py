@@ -11,41 +11,30 @@ class QueryUnderstandingAgent:
             temperature=0
         )
 
+
         self.prompt = ChatPromptTemplate.from_messages(
             [
                 (
                     "system",
                     """
 You are the Query Understanding Agent
-for a Legal RTI Assistant specializing
-in land-dispute-related RTI matters.
+of a Legal RTI Assistant.
 
-Analyze the user's request.
+Understand the user's request.
 
-Extract:
+Identify:
 
-1. Main intent
-2. Type of RTI issue
-3. Land-dispute subject
-4. Important facts
-5. Important dates
-6. Authorities mentioned
-7. Keywords
-8. Whether the user appears to be asking for:
-   - RTI information
-   - RTI eligibility
-   - RTI section
-   - case comparison
-   - appeal
-   - complaint
-   - appeal drafting
-   - general explanation
+1. Main objective
+2. Important entities
+3. Whether an uploaded document is relevant
+4. References such as "this", "it", "my case"
+5. What the user expects as the answer
 
-Do NOT provide legal advice.
+Do NOT answer the legal question.
 
-Return a structured analysis.
+Provide a concise analysis.
 
-User request:
+Current request:
 
 {question}
 """
@@ -53,9 +42,13 @@ User request:
             ]
         )
 
+
     def run(self, question):
 
-        chain = self.prompt | self.llm
+        chain = (
+            self.prompt
+            | self.llm
+        )
 
         response = chain.invoke(
             {

@@ -11,76 +11,83 @@ class AppealDraftingAgent:
             temperature=0
         )
 
+
         self.prompt = ChatPromptTemplate.from_messages(
             [
                 (
                     "system",
                     """
-You are the Appeal Drafting Agent for a
-Legal RTI Assistant.
+You are an RTI Appeal Drafting Agent.
 
-Draft a FIRST APPEAL under the RTI framework
-based ONLY on the information provided.
+Draft an appropriate RTI appeal based only
+on the provided information.
+
+Do not invent:
+
+- dates
+- names
+- application numbers
+- authorities
+- facts
+- legal provisions
+
+Use placeholders where information
+is missing.
 
 The draft should contain:
 
-1. To
-2. Appellant details placeholder
-3. Subject
-4. Reference to original RTI application
-5. Facts
-6. Information requested
-7. Response/rejection received
-8. Grounds for appeal
-9. Requested relief
-10. List of enclosures
+1. Appellate authority
+2. Applicant details
+3. Original RTI details
+4. Grounds for appeal
+5. Requested relief
+6. Date/place
+7. Signature placeholder
 
-Use placeholders such as:
+Uploaded document:
 
-[Applicant Name]
-[Address]
-[RTI Application Date]
-[PIO Name]
-[Application Number]
+{document}
 
-Do not invent facts.
-
-Do not invent dates.
-
-Do not invent case numbers.
-
-If necessary information is missing,
-use placeholders.
-
-Clearly state that the draft should be
-reviewed before submission.
-
-USER REQUEST:
-
-{question}
-
-LEGAL REASONING:
+Legal reasoning:
 
 {reasoning}
 
+User request:
+
+{question}
 """
                 )
             ]
         )
 
+
     def run(
         self,
         question,
-        reasoning
+        reasoning="",
+        document_text=""
     ):
 
-        chain = self.prompt | self.llm
+        chain = (
+            self.prompt
+            | self.llm
+        )
+
 
         response = chain.invoke(
             {
-                "question": question,
-                "reasoning": reasoning
+                "question":
+                    question,
+
+                "reasoning":
+                    reasoning,
+
+                "document":
+                    document_text
+                    if document_text
+                    else "No uploaded document."
             }
         )
+
 
         return response.content

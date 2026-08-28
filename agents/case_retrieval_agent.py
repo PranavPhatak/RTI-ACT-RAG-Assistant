@@ -16,67 +16,88 @@ class CaseRetrievalAgent:
             temperature=0
         )
 
+
         self.prompt = ChatPromptTemplate.from_messages(
             [
                 (
                     "system",
                     """
-You are the Case Retrieval Agent for a
-Legal RTI Assistant.
+You are the Land-Dispute Case Retrieval Agent.
 
-You are given retrieved previous
-land-dispute-related RTI cases.
+Find similar land-dispute RTI cases
+from the provided retrieved documents.
 
-Identify cases that are relevant
-to the user's situation.
+Compare:
 
-For each relevant case, identify:
-
-- Case/document
-- Applicant/Appellant/Complainant
-- Respondent/public authority
-- Type of proceeding
-- Main land-dispute issue
-- RTI issue
-- Important reasoning
+- Land dispute issue
+- RTI request
+- Parties
+- Authorities
+- Important facts
+- Legal provisions
 - Outcome
 
-ONLY use information contained in the
-provided context.
+Do not invent facts.
 
-Do not invent missing case details.
-
-Context:
-
-{context}
+If no sufficiently similar case exists,
+say so.
 
 User request:
 
 {question}
+
+Conversation memory:
+
+{memory}
+
+Retrieved cases:
+
+{cases}
 """
                 )
             ]
         )
 
-    def run(self, question):
+
+    def run(
+        self,
+        question,
+        memory=""
+    ):
 
         docs = retrieve_land_cases(
             question,
             k=5
         )
 
-        context = format_documents(docs)
 
-        chain = self.prompt | self.llm
+        context = format_documents(
+            docs
+        )
+
+
+        chain = (
+            self.prompt
+            | self.llm
+        )
+
 
         response = chain.invoke(
             {
-                "context": context,
-                "question": question
+                "question": question,
+
+                "memory": memory,
+
+                "cases": context
             }
         )
 
+
         return {
-            "analysis": response.content,
-            "documents": docs
+
+            "analysis":
+                response.content,
+
+            "documents":
+                docs
         }
