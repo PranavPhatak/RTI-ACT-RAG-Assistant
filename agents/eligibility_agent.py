@@ -1,21 +1,32 @@
-from langchain_ollama import ChatOllama
+import os
+
+from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 
 from rag_retriever import (
     retrieve_rti_act,
-    format_documents
+    format_documents,
+    ConversationMemory
 )
+
+from dotenv import load_dotenv
+load_dotenv()
 
 
 class EligibilitySectionAgent:
 
     def __init__(self):
 
-        self.llm = ChatOllama(
-            model="llama3:latest",
+        self.llm = ChatGroq(
+            model="openai/gpt-oss-120b",
             temperature=0
         )
 
+        # This agent's own memory (its previous analyses)
+        self.memory = ConversationMemory(
+            max_turns=10,
+            max_chars=1000
+        )
 
         self.prompt = ChatPromptTemplate.from_messages(
             [
@@ -30,6 +41,8 @@ You have two sources:
 
 1. Uploaded document
 2. RTI Act knowledge retrieved from FAISS
+   (or, if FAISS had nothing relevant, general
+   background retrieved from Wikipedia)
 
 IMPORTANT:
 
@@ -52,6 +65,25 @@ section may apply.
 
 Use only the provided context.
 
+Context whose Source Type is WIKIPEDIA is general
+background only. If you use it, say clearly that it
+comes from Wikipedia and is NOT an authoritative
+legal text. Never present Wikipedia content as the
+wording of an RTI Act section. If the context says
+that no relevant context was found, say so.
+
+Use the conversation memory ONLY to understand
+references such as "this", "it" or "my RTI".
+
+CONVERSATION MEMORY:
+
+{memory}
+
+YOUR PREVIOUS ANALYSES IN THIS CONVERSATION
+(for continuity only):
+
+{agent_history}
+
 USER QUESTION:
 
 {question}
@@ -64,6 +96,10 @@ RTI ACT CONTEXT:
 
 {rti_context}
 """
+                ),
+                (
+                    "human",
+                    "Provide your RTI section analysis now."
                 )
             ]
         )
@@ -73,17 +109,23 @@ RTI ACT CONTEXT:
         self,
         question,
         document_text="",
-        memory=""
+        memory="",
+        session_id="default",
+        search_query=None
     ):
 
+        # FAISS first; Wikipedia only if FAISS has nothing relevant
         docs = retrieve_rti_act(
-            question,
+            search_query or question,
             k=5
         )
 
 
-        rti_context = format_documents(
-            docs
+        rti_context = (
+            format_documents(docs)
+            if docs
+            else "NO RELEVANT RTI ACT CONTEXT WAS FOUND "
+                 "IN THE KNOWLEDGE BASE OR WIKIPEDIA."
         )
 
 
@@ -104,8 +146,23 @@ RTI ACT CONTEXT:
             {
                 "question": question,
                 "document": document,
-                "rti_context": rti_context
+                "rti_context": rti_context,
+                "memory": memory or "No previous interactions.",
+                "agent_history": self.memory.as_text(
+                    session_id,
+                    last_n=2,
+                    user_label="QUESTION",
+                    assistant_label="YOUR ANALYSIS",
+                    empty="None yet."
+                )
             }
+        )
+
+
+        self.memory.add(
+            session_id,
+            question,
+            response.content
         )
 
 
@@ -117,3 +174,8 @@ RTI ACT CONTEXT:
             "documents":
                 docs
         }
+
+
+    def clear_memory(self, session_id="default"):
+
+        self.memory.clear(session_id)

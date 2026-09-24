@@ -1,20 +1,32 @@
-from langchain_ollama import ChatOllama
+import os
+
+from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from rag_retriever import (
     retrieve_land_cases,
-    format_documents
+    format_documents,
+    ConversationMemory
 )
-
 
 class CaseRetrievalAgent:
 
     def __init__(self):
 
-        # Local LLM
-        self.llm = ChatOllama(
-            model="llama3:latest",
+        # Groq LLM
+        self.llm = ChatGroq(
+            model="openai/gpt-oss-120b",
             temperature=0
+        )
+
+        # This agent's own memory (its previous case analyses)
+        self.memory = ConversationMemory(
+            max_turns=10,
+            max_chars=1000
         )
 
         # Prompt for similar case analysis
@@ -45,6 +57,17 @@ IMPORTANT RULES:
 7. Distinguish between facts explicitly present in the documents and
    conclusions based on similarity.
 8. Explain the relevance of every case you include.
+9. Documents whose Source Type is WIKIPEDIA are general background
+   articles retrieved because the case database had nothing relevant.
+   They are NOT cases. Never present a Wikipedia article as a case,
+   judgment or order. If ONLY Wikipedia documents were retrieved,
+   say: "No sufficiently similar case was found in the retrieved
+   documents." and then, if useful, add a short section called
+   "GENERAL BACKGROUND (Wikipedia, not a legal authority)".
+10. If the retrieved documents section says that nothing relevant was
+    found, use the sentence from rule 6.
+11. Use the conversation memory ONLY to understand references such as
+    "this case" or "it". Do not take case facts from the memory.
 
 Compare the user's query with the retrieved cases using these factors:
 
@@ -102,6 +125,9 @@ OVERALL ASSESSMENT
 [Briefly explain which retrieved case is the closest match to the user's
 query and why.]
 
+YOUR PREVIOUS CASE ANALYSES IN THIS CONVERSATION (for continuity only):
+{agent_history}
+
 USER QUERY:
 {question}
 
@@ -111,6 +137,10 @@ CONVERSATION MEMORY:
 RETRIEVED CASES:
 {cases}
 """
+                ),
+                (
+                    "human",
+                    "Provide your case analysis now."
                 )
             ]
         )
@@ -118,17 +148,25 @@ RETRIEVED CASES:
     def run(
         self,
         question,
-        memory=""
+        memory="",
+        session_id="default",
+        search_query=None
     ):
 
-        # Retrieve similar land-dispute cases
+        # Retrieve similar land-dispute cases from FAISS.
+        # Wikipedia is used only if FAISS has nothing relevant.
         docs = retrieve_land_cases(
-            question,
+            search_query or question,
             k=5
         )
 
         # Format retrieved documents for the LLM
-        context = format_documents(docs)
+        context = (
+            format_documents(docs)
+            if docs
+            else "NO RELEVANT CASES OR BACKGROUND DOCUMENTS "
+                 "WERE FOUND IN THE KNOWLEDGE BASE OR WIKIPEDIA."
+        )
 
         # Create LCEL chain
         chain = (
@@ -140,12 +178,29 @@ RETRIEVED CASES:
         response = chain.invoke(
             {
                 "question": question,
-                "memory": memory,
-                "cases": context
+                "memory": memory or "No previous interactions.",
+                "cases": context,
+                "agent_history": self.memory.as_text(
+                    session_id,
+                    last_n=2,
+                    user_label="QUERY",
+                    assistant_label="YOUR ANALYSIS",
+                    empty="None yet."
+                )
             }
+        )
+
+        self.memory.add(
+            session_id,
+            question,
+            response.content
         )
 
         return {
             "analysis": response.content,
             "documents": docs
         }
+
+    def clear_memory(self, session_id="default"):
+
+        self.memory.clear(session_id)

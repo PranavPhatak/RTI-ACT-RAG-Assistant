@@ -1,9 +1,13 @@
-from langchain_ollama import ChatOllama
-from langchain_core.prompts import ChatPromptTemplate
-
+import os
 import json
 import re
 
+from langchain_groq import ChatGroq
+from langchain_core.prompts import ChatPromptTemplate
+
+from rag_retriever import ConversationMemory
+from dotenv import load_dotenv
+load_dotenv()
 
 class VerificationAgent:
 
@@ -13,9 +17,18 @@ class VerificationAgent:
         # LLM
         # ====================================================
 
-        self.llm = ChatOllama(
-            model="qwen3:8b",
+        self.llm = ChatGroq(
+            model="openai/gpt-oss-120b",
             temperature=0
+        )
+
+        # ====================================================
+        # MEMORY (previous verdicts, for consistency only)
+        # ====================================================
+
+        self.memory = ConversationMemory(
+            max_turns=10,
+            max_chars=500
         )
 
         # ====================================================
@@ -52,6 +65,11 @@ Check the following:
 7. If an uploaded document is available, does the
    answer correctly represent that document?
 
+8. If the context contains WIKIPEDIA sources, does the
+   answer present that information only as general
+   background, and NOT as the wording of an RTI Act
+   section, a binding legal rule or a court case?
+
 IMPORTANT:
 
 For legal information, do not assume that something
@@ -62,6 +80,10 @@ consider that claim unsupported.
 
 If the answer contains information that cannot be
 verified from the provided context, mark it as false.
+
+The previous verification results are shown ONLY so that
+your judgments stay consistent. Judge the CURRENT answer
+ONLY against the CURRENT context.
 
 Return ONLY valid JSON in this exact format:
 
@@ -82,6 +104,12 @@ Do not include markdown.
 Do not include ```json.
 
 Do not provide a new answer.
+
+====================================================
+PREVIOUS VERIFICATION RESULTS (consistency only)
+====================================================
+
+{agent_history}
 
 ====================================================
 USER QUESTION
@@ -108,6 +136,10 @@ GENERATED ANSWER
 {answer}
 
 """
+                ),
+                (
+                    "human",
+                    "Return the JSON verification result now."
                 )
             ]
         )
@@ -122,7 +154,8 @@ GENERATED ANSWER
         question,
         answer,
         context="",
-        query_analysis=""
+        query_analysis="",
+        session_id="default"
     ):
 
         # ====================================================
@@ -148,7 +181,16 @@ GENERATED ANSWER
                     else "NO ADDITIONAL CONTEXT AVAILABLE",
 
                 "query_analysis":
-                    query_analysis
+                    query_analysis,
+
+                "agent_history":
+                    self.memory.as_text(
+                        session_id,
+                        last_n=3,
+                        user_label="QUESTION",
+                        assistant_label="RESULT",
+                        empty="None yet."
+                    )
             }
         )
 
@@ -157,7 +199,22 @@ GENERATED ANSWER
         # GET RAW RESPONSE
         # ====================================================
 
-        raw = response.content.strip()
+        raw = str(response.content).strip()
+
+
+        # ====================================================
+        # REMOVE QWEN3 THINKING BLOCK
+        # ====================================================
+
+        # Qwen3 on Groq may return its reasoning inside
+        # <think> ... </think> before the JSON.
+
+        raw = re.sub(
+            r"<think>.*?</think>",
+            "",
+            raw,
+            flags=re.DOTALL | re.IGNORECASE
+        ).strip()
 
 
         # ====================================================
@@ -238,7 +295,7 @@ GENERATED ANSWER
             )
 
 
-            return {
+            outcome = {
                 "verified": bool(verified),
 
                 "feedback": str(feedback)
@@ -268,7 +325,7 @@ GENERATED ANSWER
                 "HALLUCINATION" in upper_raw
             ):
 
-                return {
+                outcome = {
                     "verified": False,
 
                     "feedback":
@@ -278,7 +335,7 @@ GENERATED ANSWER
 
             # Look for explicit positive verification.
 
-            if (
+            elif (
                 '"VERIFIED": TRUE' in upper_raw
                 or
                 "VERIFIED: TRUE" in upper_raw
@@ -288,7 +345,7 @@ GENERATED ANSWER
                 "SUPPORTED" in upper_raw
             ):
 
-                return {
+                outcome = {
                     "verified": True,
 
                     "feedback":
@@ -300,9 +357,31 @@ GENERATED ANSWER
             # SAFEST DEFAULT
             # =================================================
 
-            return {
-                "verified": False,
+            else:
 
-                "feedback":
-                    "The verification agent did not return a valid verification result."
-            }
+                outcome = {
+                    "verified": False,
+
+                    "feedback":
+                        "The verification agent did not return a valid verification result."
+                }
+
+
+        # ====================================================
+        # REMEMBER THIS VERDICT
+        # ====================================================
+
+        self.memory.add(
+            session_id,
+            question,
+            f"verified={outcome['verified']}; "
+            f"feedback={outcome['feedback']}"
+        )
+
+
+        return outcome
+
+
+    def clear_memory(self, session_id="default"):
+
+        self.memory.clear(session_id)

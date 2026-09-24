@@ -1,14 +1,26 @@
-from langchain_ollama import ChatOllama
+import os
+
+from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
+
+from rag_retriever import ConversationMemory
+from dotenv import load_dotenv
+load_dotenv()
 
 
 class UserFriendlyResponseAgent:
 
     def __init__(self):
 
-        self.llm = ChatOllama(
-            model="llama3:latest",
+        self.llm = ChatGroq(
+            model="openai/gpt-oss-120b",
             temperature=0
+        )
+
+        # This agent's own memory (its previous simplified answers)
+        self.memory = ConversationMemory(
+            max_turns=10,
+            max_chars=1200
         )
 
         self.prompt = ChatPromptTemplate.from_messages(
@@ -63,6 +75,16 @@ IMPORTANT RULES:
 
 15. Do not give professional legal advice.
 
+16. If the original response says that some
+    information comes from Wikipedia or is only
+    general background, keep that note clearly
+    visible. Do not present it as law or as a case.
+
+17. Use the conversation memory ONLY to keep the
+    wording consistent with earlier answers (for
+    example, do not repeat explanations that were
+    already given). Never take new facts from it.
+
 The target user may have limited knowledge
 of legal terminology.
 
@@ -70,19 +92,34 @@ Make the response understandable to a
 normal person asking for help with an RTI
 or land-dispute matter.
 
+Conversation memory:
+
+{memory}
+
+Your previous simplified answers in this conversation:
+
+{agent_history}
+
 Original response:
 
 {response}
-
-Rewrite the response in simple,
-easy-to-understand language.
 """
+                ),
+                (
+                    "human",
+                    "Rewrite the response in simple, easy-to-understand language."
                 )
             ]
         )
 
 
-    def run(self, response):
+    def run(
+        self,
+        response,
+        question="",
+        memory="",
+        session_id="default"
+    ):
 
         if not response or not response.strip():
 
@@ -98,8 +135,31 @@ easy-to-understand language.
 
         result = chain.invoke(
             {
-                "response": response
+                "response": response,
+
+                "memory":
+                    memory or "No previous interactions.",
+
+                "agent_history":
+                    self.memory.as_text(
+                        session_id,
+                        last_n=2,
+                        user_label="QUESTION",
+                        assistant_label="YOUR SIMPLIFIED ANSWER",
+                        empty="None yet."
+                    )
             }
         )
 
+        self.memory.add(
+            session_id,
+            question or "Simplify the legal response",
+            result.content
+        )
+
         return result.content
+
+
+    def clear_memory(self, session_id="default"):
+
+        self.memory.clear(session_id)

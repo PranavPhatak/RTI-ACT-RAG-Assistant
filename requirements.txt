@@ -9,3 +9,4 @@ langchain_ollama
 faiss-cpu
 langchain-text-splitters
 langchain
+langchain-groq
