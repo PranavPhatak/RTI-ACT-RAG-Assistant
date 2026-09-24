@@ -453,7 +453,7 @@ if question:
     with st.chat_message("assistant"):
 
         with st.spinner(
-            "Understanding your request..."
+            "Processing your request..."
         ):
 
             try:
