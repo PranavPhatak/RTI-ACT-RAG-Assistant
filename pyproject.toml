@@ -17,4 +17,5 @@ dependencies = [
     "pypdf>=6.14.2",
     "python-dotenv>=1.2.2",
     "streamlit>=1.60.0",
+    "wikipedia>=1.4.0",
 ]

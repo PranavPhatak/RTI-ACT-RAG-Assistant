@@ -1,6 +1,6 @@
 import os
 
-from langchain_groq import ChatGroq
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 
 from rag_retriever import (
@@ -17,8 +17,8 @@ class EligibilitySectionAgent:
 
     def __init__(self):
 
-        self.llm = ChatGroq(
-            model="openai/gpt-oss-120b",
+        self.llm = ChatGoogleGenerativeAI(
+            model="gemini-3.7-flash",
             temperature=0
         )
 

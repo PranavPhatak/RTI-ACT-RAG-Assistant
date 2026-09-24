@@ -1,5 +1,5 @@
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_ollama import ChatOllama
+from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from dotenv import load_dotenv
 
@@ -47,8 +47,8 @@ class Orchestrator:
         # ROUTER LLM
         # ====================================================
 
-        self.router_llm = ChatOllama(
-            model="llama3:latest",
+        self.router_llm = ChatGroq(
+            model="openai/gpt-oss-20b",
             temperature=0,
         )
 
