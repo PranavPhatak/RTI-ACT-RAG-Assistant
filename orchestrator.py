@@ -16,21 +16,6 @@ import os
 
 
 # ============================================================
-# LOAD ENVIRONMENT VARIABLES
-# ============================================================
-
-load_dotenv()
-
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-
-if not GOOGLE_API_KEY:
-    raise ValueError(
-        "GOOGLE_API_KEY is not configured. "
-        "Please add it to your .env file."
-    )
-
-
-# ============================================================
 # ORCHESTRATOR
 # ============================================================
 
