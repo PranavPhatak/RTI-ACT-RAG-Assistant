@@ -11,3 +11,4 @@ langchain-text-splitters
 langchain
 langchain-groq
 wikipedia
+langchain-nvidia-ai-endpoints

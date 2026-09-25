@@ -1,4 +1,4 @@
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from dotenv import load_dotenv
@@ -48,7 +48,7 @@ class Orchestrator:
         # ====================================================
 
         self.router_llm = ChatGroq(
-            model="openai/gpt-oss-20b",
+            model="openai/gpt-oss-120b",
             temperature=0,
         )
 

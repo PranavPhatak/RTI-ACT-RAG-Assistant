@@ -1,6 +1,7 @@
 import os
 
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
+from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langchain_core.prompts import ChatPromptTemplate
 
 from rag_retriever import ConversationMemory
@@ -13,8 +14,8 @@ class AppealDraftingAgent:
 
     def __init__(self):
 
-        self.llm = ChatGoogleGenerativeAI(
-            model="gemini-3.7-flash",
+        self.llm = ChatGroq(
+            model="openai/gpt-oss-20b",
             temperature=0
         )
 
