@@ -2,6 +2,8 @@ import os
 
 from dotenv import load_dotenv
 
+from langchain_ollama import ChatOllama
+from langchain_mistralai import ChatMistralAI
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 
@@ -13,10 +15,7 @@ from rag_retriever import (
 
 load_dotenv()
 
-GROQ_MODEL = os.getenv(
-    "GROQ_MODEL",
-    "llama-3.3-70b-versatile"
-)
+
 
 
 # ============================================================
@@ -32,8 +31,8 @@ class GeneralRAGAgent:
 
     def __init__(self):
 
-        self.llm = ChatGroq(
-            model=GROQ_MODEL,
+        self.llm = ChatOllama(
+            model="qwen3:8b",
             temperature=0
         )
 

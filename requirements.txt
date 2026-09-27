@@ -12,3 +12,4 @@ langchain
 langchain-groq
 wikipedia
 langchain-nvidia-ai-endpoints
+langchain-mistralai

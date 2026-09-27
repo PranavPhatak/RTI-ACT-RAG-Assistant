@@ -1,4 +1,6 @@
+from langchain_mistralai import ChatMistralAI
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
+from langchain_ollama import ChatOllama
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from dotenv import load_dotenv
@@ -47,8 +49,8 @@ class Orchestrator:
         # ROUTER LLM
         # ====================================================
 
-        self.router_llm = ChatGroq(
-            model="openai/gpt-oss-120b",
+        self.router_llm = ChatOllama(
+            model="qwen3:8b",
             temperature=0,
         )
 

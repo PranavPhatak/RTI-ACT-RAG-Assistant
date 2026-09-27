@@ -1,5 +1,7 @@
 import os
 
+from langchain_ollama import ChatOllama
+from langchain_mistralai import ChatMistralAI
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
@@ -16,8 +18,8 @@ class QueryUnderstandingAgent:
 
     def __init__(self):
 
-        self.llm = ChatGroq(
-            model="openai/gpt-oss-20b",
+        self.llm = ChatOllama(
+            model="qwen3:8b",
             temperature=0
         )
 
